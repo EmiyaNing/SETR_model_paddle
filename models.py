@@ -210,22 +210,55 @@ class Encoder(Layer):
         encoded = self.encoder_norm(input)
         return encoded, attention_weight
 
+'''
+    Top level Decoder class...
+    In this class, the input line list will be reshape as a image list, and each image's size is h/16 * w/16.
+    Decode way : (1) Naive upsampling:1 x 1 conv + sync batch norm + 1 x 1 conv + bilinearly upsample
+                 (2) Progressive Upsampling: progressive upsampling, Just like U2Net up sample way.
+                 (3) Multi-Level feature Aggregation: 
+'''
 
-
-class Decoder(Layer):
+class Decoder_Naive(Layer):
     '''
-        Top level Decoder class...
-        In this class, the input line list will be reshape as a image list, and each image's size is h/16 * w/16.
-        Decode way : (1) Naive upsampling:1 x 1 conv + sync batch norm + 1 x 1 conv + bilinearly upsample
-                     (2) Progressive Upsampling: progressive upsampling, Just like U2Net up sample way.
-                     (3) Multi-Level feature Aggregation: 
+        1. Reshape the input image...
+        2. use a 1*1 conv to decrease the hidden unit from 1024 to 512
+        3. BatchNorm
+        4. use a 1*1 conv to decrease the hidden unit from 512 to num_class..
+        5. bilinearly upsampling ths image to original image...
     '''
-    def __init__(self,):
-        super(Decoder, self).__init__()
+    def __init__(self, num_classes, hidden_unit_num, dropout):
+        super(Decoder_Naive, self).__init__()
     
-    def forward(self,):
+    def forward(self, input):
         pass
 
+class Decoder_PUP(Layer):
+    '''
+        1. Reshape the input image....
+        2. use a transpose conv to decrease the hidden unit from 1024 to 512
+        3. use a transpose conv to decrease the hidden unit from 512 to 256
+        4. use a transpose conv to decrease the hidden unit from 256 to 128
+        5. use a transpose conv to decrease the hidden unit from 128 to 64
+        6. use a 1*1 conv to decrease the hidden unit from 64 to num_class
+    '''
+    def __init__(self, num_class, hidden_unit_num, dropout):
+        super(Decoder_PUP, self).__init__()
+
+    def forward(self, input):
+        pass
+
+class Decoder_MLA(Layer):
+    '''
+        1. Reshape the input image
+        2. Get feature sequence from each transformer block's output
+        3. Add this feature  map and upsampling them 4 time
+        4. Use a transpose to up this feature map 4 time, and decrease the hidden unit to num_class...
+    '''
+    def __init__(self, num_class, hidden_unit_num, dropout):
+        super(Decoder_MLA, self).__init__()
+
+    def forward(self, input):
+        pass
 
 class Transformer(Layer):
     '''
@@ -242,7 +275,7 @@ class Transformer(Layer):
         super(Transformer, self).__init__()
         self.embedding  = Embedding(hidden_unit_num, image_size, 3, 16, dropout)
         self.encoder = Encoder(image_size, hidden_unit_num,layer_num, head_num, dropout, visualable)
-        self.decoder = Decoder(num_classes, hiden_unit_num, dropout)
+        #self.decoder = Decoder(num_classes, hiden_unit_num, dropout)
 
     def forward(self, input):
         '''
