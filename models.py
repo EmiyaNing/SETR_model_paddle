@@ -22,6 +22,8 @@ from paddle.fluid.dygraph import Dropout
 from paddle.fluid.dygraph import Conv2D
 from paddle.fluid.dygraph import Linear
 from paddle.fluid.dygraph import LayerList
+from paddle.fluid.dygraph import BatchNorm
+from paddle.fluid.dygraph import Conv2DTranspose
 
 class Attention(Layer):
     '''
@@ -226,11 +228,37 @@ class Decoder_Naive(Layer):
         4. use a 1*1 conv to decrease the hidden unit from 512 to num_class..
         5. bilinearly upsampling ths image to original image...
     '''
-    def __init__(self, num_classes, hidden_unit_num, dropout):
+    def __init__(self, num_classes, hidden_unit_num, n_patch_size, image_size, dropout):
         super(Decoder_Naive, self).__init__()
+        self.image_size = image_size
+        self.cut_op= Linear(n_patch_size + 1, n_patch_size)
+        self.conv1 = Conv2D(hidden_unit_num, 512, 1, 1)
+        self.conv2 = Conv2D(512, num_classes, 1, 1)
+        self.batchnorm = BatchNorm(512,act='relu')
+        self.up_output = fluid.layers.resize_nearest
+
     
     def forward(self, input):
-        pass
+        '''
+            Input Shape will be n * (n_patch_size + 1) * hidden_unit_num...
+            1. reshape the matrix to n * hidden_unit_num * (n_patch_size + 1)
+            2. remove the axi 1 first row.
+            3. reshape the matrix to n * hidden_unit_num * h * w
+            4. conv 1*1 to decrease the hidden_unit_num
+            5. batch norm
+            6. conv 1*1 to decrease the hidden_unit_num to num_class
+        '''
+        h = fluid.layers.transpose(input, [0, 2, 1])
+        x = self.cut_op(h)
+        original_image_size = int(math.sqrt(x.shape[2]))
+        x = fluid.layers.reshape(x, [x.shape[0], x.shape[1], original_image_size, original_image_size])
+        x = self.conv1(x)
+        x = self.batchnorm(x)
+        x = self.conv2(x)
+        x = self.up_output(x, out_shape=[self.image_size, self.image_size])
+        return x
+
+
 
 class Decoder_PUP(Layer):
     '''
@@ -241,11 +269,27 @@ class Decoder_PUP(Layer):
         5. use a transpose conv to decrease the hidden unit from 128 to 64
         6. use a 1*1 conv to decrease the hidden unit from 64 to num_class
     '''
-    def __init__(self, num_class, hidden_unit_num, dropout):
+    def __init__(self, num_class, hidden_unit_num, n_patch_size, dropout):
         super(Decoder_PUP, self).__init__()
+        self.cut_op    = Linear(n_patch_size+1, n_patch_size)
+        self.up_layer1 = Conv2DTranspose(num_channels=hidden_unit_num, num_filters=512, filter_size=2, stride=2)
+        self.up_layer2 = Conv2DTranspose(num_channels=512, num_filters=256, filter_size=2, stride=2)
+        self.up_layer3 = Conv2DTranspose(num_channels=256, num_filters=128, filter_size=2, stride=2)
+        self.up_layer4 = Conv2DTranspose(num_channels=128, num_filters=64, filter_size=2, stride=2)
+        self.conv2     = Conv2D(64, num_class, 1, 1)
 
     def forward(self, input):
-        pass
+        h = fluid.layers.transpose(input, [0, 2, 1])
+        x = self.cut_op(h)
+        original_image_size = int(math.sqrt(x.shape[2]))
+        x = fluid.layers.reshape(x, [x.shape[0], x.shape[1], original_image_size, original_image_size])
+        x = self.up_layer1(x)
+        x = self.up_layer2(x)
+        x = self.up_layer3(x)
+        x = self.up_layer4(x)
+        x = self.conv2(x)
+        return x
+
 
 class Decoder_MLA(Layer):
     '''
@@ -254,11 +298,46 @@ class Decoder_MLA(Layer):
         3. Add this feature  map and upsampling them 4 time
         4. Use a transpose to up this feature map 4 time, and decrease the hidden unit to num_class...
     '''
-    def __init__(self, num_class, hidden_unit_num, dropout):
+    def __init__(self, num_class, hidden_unit_num,  n_patch_size, dropout):
         super(Decoder_MLA, self).__init__()
+        self.cut_op = Linear(n_patch_size+1, n_patch_size)
+        self.conv1  = Conv2D(hidden_unit_num*5, 512, 1, 1, padding=0)
+        self.conv2  = Conv2D(512, 256, 3, 1, padding=2)
+        self.conv3  = Conv2D(256, 128, 3, 1, padding=2)
+        self.resize_1 = fluid.layers.resize_nearest
+        self.resize_2 = fluid.layers.resize_nearest
+        self.conv4  = Conv2D(128, num_class, 3, 1, padding=2)
 
     def forward(self, input):
-        pass
+        '''
+            The input of this function is M * N * (Patchsize + 1) * C
+            1. Spilt each N * (Patchsize + 1) * C to a matrix
+            2. Cut each matrix to N * Patchsize * C
+            3. Transpose each matrix to N * C * patchsize
+            4. Reshape each matrix to N * C * h * w 
+            5. Add all matrix to a new matrix
+            6. Conv 1*1, Conv 3*3, Conv 3*3 to each matrix
+            7. nearest_resize each matrix 4 time
+            8. Conv 3*3 to resize matrix
+            9. nearest_resize each matrix 4 time
+        '''
+        new_feature_map = input[0]
+        size  = int(math.sqrt(new_feature_map.shape[1] - 1))
+        for i in range(1, 4):
+            new_feature_map += input[i]
+        input.append(new_feature_map)
+        all_map = fluid.layers.concat(input, axis=2)
+        h = fluid.layers.transpose(all_map, [0, 2, 1])
+        x = self.cut_op(h)
+        x = fluid.layers.reshape(x, [x.shape[0], x.shape[1], size, size])
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.resize_1(x, [size*4, size*4])
+        x = self.conv4(x)
+        x = self.resize_2(x, [size*16, size*16])
+        return x
+      
 
 class Transformer(Layer):
     '''

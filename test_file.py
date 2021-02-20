@@ -61,7 +61,35 @@ def Encoder_test():
             print(element.shape)
 
 
+def Decoder_Naive_test():
+    with fluid.dygraph.guard():
+        data = np.random.rand(13, 257, 1024).astype('float32')
+        data = fluid.dygraph.to_variable(data)
+        decoder = Decoder_Naive(13, 1024, 256, 256, 0.8)
+        res  = decoder(data)
+        print(res.shape)
+
+def Decoder_PUP_test():
+    with fluid.dygraph.guard():
+        data = np.random.rand(13, 257, 1024).astype('float32')
+        data = fluid.dygraph.to_variable(data)
+        decoder = Decoder_PUP(13, 1024, 256, 0.8)
+        res  = decoder(data)
+        print(res.shape)
+
+
+def Decoder_MLA_test():
+    with fluid.dygraph.guard():
+        input = []
+        for i in range(4):
+            data = np.random.rand(13, 257, 1024).astype('float32')
+            data = fluid.dygraph.to_variable(data)
+            input.append(data)
+        decoder = Decoder_MLA(13, 1024, 256, 0.8)
+        res     = decoder(input)
+        print(res.shape)
+
 if __name__ == '__main__':
-    Encoder_test()
+    Decoder_MLA_test()
 
     

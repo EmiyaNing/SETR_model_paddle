@@ -57,3 +57,18 @@ Now there is no problem.....
 1. Why the self-attention need the query , key , value
 2. What is the transpose conv's detail workflow
 3. Which loss function is fitted to train this model...
+
+# Date 2021/2/20
+#### work Detail
+1. Finish the Decoder Naive and verified
+2. Finish the Decoder PUP and verified
+3. Finish the Decoder MLA and verified
+
+
+#### Todolist
+1. Finish the Transformer model and verify
+2. Choose the right loss function to train this model
+3. Finish the Right data augment file
+4. Find the reason why the model under fitting 
+5. Try to reload the model to do some test...
+
