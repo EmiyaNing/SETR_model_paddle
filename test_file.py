@@ -89,7 +89,17 @@ def Decoder_MLA_test():
         res     = decoder(input)
         print(res.shape)
 
+def Transformer_test():
+    with fluid.dygraph.guard():
+        image = np.random.rand(13, 3, 256, 256).astype('float32')
+        image = fluid.dygraph.to_variable(image)
+        transformer = Transformer(256, 13, 1024, 8, 8, 0.8, 'Naive')
+        res, weight = transformer(image)
+        print(res.shape)
+        for element in weight:
+            print(element.shape)
+
 if __name__ == '__main__':
-    Decoder_MLA_test()
+    Transformer_test()
 
     

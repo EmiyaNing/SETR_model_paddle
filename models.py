@@ -193,8 +193,11 @@ class Encoder(Layer):
                  layer_num,
                  head_num,
                  dropout,
-                 visualable):
+                 visualable,
+                 save_layer = 0):
         super(Encoder, self).__init__()
+        self.save_layer = save_layer
+        self.layer_num = layer_num
         self.vis  = visualable
         self.model= LayerList()
         self.encoder_norm = LayerNorm(hidden_unit_num, epsilon=1e-6)
@@ -205,12 +208,23 @@ class Encoder(Layer):
     
     def forward(self, input):
         attention_weight = []
-        for layer in self.model:
+        layer_output = []
+        base_num = 0 if self.save_layer == 0 else (self.layer_num // self.save_layer)
+
+        for id, layer in enumerate(self.model):
             input , weight = layer(input)
+            if base_num != 0 and (id % base_num == 0):
+                layer_output.append(input)
             if self.vis:
                 attention_weight.append(weight)
-        encoded = self.encoder_norm(input)
-        return encoded, attention_weight
+        
+        if base_num != 0:
+            for i in range(len(layer_output)):
+                layer_output[i] = self.encoder_norm(layer_output[i])
+            return layer_output, weight
+        else:
+            encoder = self.encoder_norm(input)
+            return encoder, attention_weight
 
 '''
     Top level Decoder class...
@@ -350,11 +364,23 @@ class Transformer(Layer):
                  layer_num=6,           # the fully connect layer's number
                  head_num=8,            # the number of self-attention head
                  dropout=0.1,           # the dropout probility
+                 encoder_name='MLA',     # can be MLA, PUP, Naive
                  visualable=True):
         super(Transformer, self).__init__()
+        self.image_patch_size = (image_size // 16)*(image_size // 16)
         self.embedding  = Embedding(hidden_unit_num, image_size, 3, 16, dropout)
-        self.encoder = Encoder(image_size, hidden_unit_num,layer_num, head_num, dropout, visualable)
-        #self.decoder = Decoder(num_classes, hiden_unit_num, dropout)
+        if encoder_name == 'MLA':
+            self.encoder = Encoder(hidden_unit_num, layer_num, head_num, dropout, visualable, 4)
+            self.decoder = Decoder_MLA(num_classes, hidden_unit_num, self.image_patch_size, dropout)
+        elif encoder_name == 'PUP':
+            self.encoder = Encoder(hidden_unit_num, layer_num, head_num, dropout, visualable)
+            self.decoder = Decoder_PUP(num_classes, hidden_unit_num, self.image_patch_size, dropout)
+        elif encoder_name == 'Naive':
+            self.encoder = Encoder(hidden_unit_num, layer_num, head_num, dropout, visualable)
+            self.decoder = Decoder_Naive(num_classes, hidden_unit_num, self.image_patch_size, image_size, dropout)
+        else:
+            print("ERROR!!!!!!!!!")
+            exit()
 
     def forward(self, input):
         '''
@@ -367,6 +393,6 @@ class Transformer(Layer):
         x = self.embedding(input)
         x, weight = self.encoder(x)
         x = self.decoder(x)
-        return x
+        return x, weight
 
     
