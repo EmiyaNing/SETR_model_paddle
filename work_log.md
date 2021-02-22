@@ -72,3 +72,9 @@ Now there is no problem.....
 4. Find the reason why the model under fitting 
 5. Try to reload the model to do some test...
 
+# Date 2021/2/21
+#### work Detail
+1. Finish the Decoder Naive
+2. Finish the Decoder PUP
+3. Finish the Decoder MLA
+
