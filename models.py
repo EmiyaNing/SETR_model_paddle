@@ -364,18 +364,18 @@ class Transformer(Layer):
                  layer_num=6,           # the fully connect layer's number
                  head_num=8,            # the number of self-attention head
                  dropout=0.1,           # the dropout probility
-                 encoder_name='MLA',     # can be MLA, PUP, Naive
+                 decoder_name='MLA',     # can be MLA, PUP, Naive
                  visualable=True):
         super(Transformer, self).__init__()
         self.image_patch_size = (image_size // 16)*(image_size // 16)
         self.embedding  = Embedding(hidden_unit_num, image_size, 3, 16, dropout)
-        if encoder_name == 'MLA':
+        if decoder_name == 'MLA':
             self.encoder = Encoder(hidden_unit_num, layer_num, head_num, dropout, visualable, 4)
             self.decoder = Decoder_MLA(num_classes, hidden_unit_num, self.image_patch_size, dropout)
-        elif encoder_name == 'PUP':
+        elif decoder_name == 'PUP':
             self.encoder = Encoder(hidden_unit_num, layer_num, head_num, dropout, visualable)
             self.decoder = Decoder_PUP(num_classes, hidden_unit_num, self.image_patch_size, dropout)
-        elif encoder_name == 'Naive':
+        elif decoder_name == 'Naive':
             self.encoder = Encoder(hidden_unit_num, layer_num, head_num, dropout, visualable)
             self.decoder = Decoder_Naive(num_classes, hidden_unit_num, self.image_patch_size, image_size, dropout)
         else:

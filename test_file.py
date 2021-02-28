@@ -2,6 +2,8 @@ from models import *
 import paddle
 import paddle.fluid
 import numpy as np
+import Data_Augement as augment
+from Data_Augement import Data_Preprocess
 
 def Embedding_test():
     with fluid.dygraph.guard():
@@ -99,7 +101,37 @@ def Transformer_test():
         for element in weight:
             print(element.shape)
 
+def Augment_test():
+    image = cv2.imread("test.jpg")
+    norm  = augment.normalize(image, 10, 1)
+    resize= augment.resize(image, 480)
+    horiz = augment.horizontal_flip(image)
+    bright= augment.brightness(image, 50, 200)
+    contrast = augment.contrast(image, 10, 200)
+    satura= augment.saturation(image, 10, 200)
+    hue   = augment.hue(image, 10, 200)
+    rotate= augment.rotate(image, 10, 200)
+    center= augment.center_crop(image, 480)
+    random,h,w= augment.random_crop(image, 480)
+    cv2.imwrite('norm.jpg', norm)
+    cv2.imwrite('resize.jpg', resize)
+    cv2.imwrite('horize.jpg', horiz)
+    cv2.imwrite('bright.jpg', bright)
+    cv2.imwrite('contrast.jpg', contrast)
+    cv2.imwrite('saturate.jpg', satura)
+    cv2.imwrite('hue.jpg', hue)
+    cv2.imwrite('rotate.jpg', rotate)
+    cv2.imwrite('center.jpg', center)
+    cv2.imwrite('random.jpg', random)
+
+def DataAugment_test():
+    preprocess = Data_Preprocess(480, 0 ,1)
+    image      = cv2.imread('test.jpg')
+    label      = np.random.rand(480, 480, 1)
+    res1, res2 = preprocess(image, label)
+    cv2.imwrite('rand_class.jpg', res1)
+
 if __name__ == '__main__':
-    Transformer_test()
+    DataAugment_test()
 
     
