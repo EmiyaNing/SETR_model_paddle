@@ -128,8 +128,8 @@ class Embedding(Layer):
         n_patch_size    = (image_size // patch_num) * (image_size // patch_num)
         self.patch_embedding    = Conv2D(num_channels=in_channel,
                                       num_filters=hidden_unit_num,
-                                      filter_size=self.patch_size,
-                                      stride=self.patch_size)
+                                      filter_size=patch_num,
+                                      stride=patch_num)
         self.position_embedding = fluid.layers.create_parameter((1, n_patch_size+1, hidden_unit_num),
                                                                 dtype='float32',
                                                                 is_bias=True)
@@ -369,6 +369,7 @@ class Transformer(Layer):
         super(Transformer, self).__init__()
         self.image_patch_size = (image_size // 16)*(image_size // 16)
         self.embedding  = Embedding(hidden_unit_num, image_size, 3, 16, dropout)
+        self.visualable = visualable
         if decoder_name == 'MLA':
             self.encoder = Encoder(hidden_unit_num, layer_num, head_num, dropout, visualable, 4)
             self.decoder = Decoder_MLA(num_classes, hidden_unit_num, self.image_patch_size, dropout)
@@ -393,6 +394,9 @@ class Transformer(Layer):
         x = self.embedding(input)
         x, weight = self.encoder(x)
         x = self.decoder(x)
-        return x, weight
+        if self.visualable:
+            return x, weight
+        else:
+            return x
 
     

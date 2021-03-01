@@ -1,9 +1,10 @@
 from models import *
 import paddle
-import paddle.fluid
+import paddle.fluid as fluid
 import numpy as np
 import Data_Augement as augment
 from Data_Augement import Data_Preprocess
+from dataload import Dataloader,Transform
 
 def Embedding_test():
     with fluid.dygraph.guard():
@@ -131,7 +132,21 @@ def DataAugment_test():
     res1, res2 = preprocess(image, label)
     cv2.imwrite('rand_class.jpg', res1)
 
+def Dataloader_test():
+    Place = paddle.fluid.CUDAPlace(0)
+    with fluid.dygraph.guard(Place):
+        #preprocess = Data_Preprocess(480, 0, 1)
+        preprocess = Transform(480)
+        dataloader = Dataloader("/home/aistudio/data/data68698", "/home/aistudio/data/data68698/train_list.txt", transform=preprocess, shuffle=True)
+        Loader     = fluid.io.DataLoader.from_generator(capacity=1, use_multiprocess=False)
+        Loader.set_sample_generator(dataloader, batch_size = 8, places = Place)
+        num_epoch = 2
+        for epoch in range(1, num_epoch+1):
+            print(f'Epoch [{epoch}/{num_epoch}]:')
+            for idx, (data, label) in enumerate(Loader):
+                print(f'Iter {idx}, Data shape: {data.shape}, Label shape: {label.shape}')
+
 if __name__ == '__main__':
-    DataAugment_test()
+    Dataloader_test()
 
     
