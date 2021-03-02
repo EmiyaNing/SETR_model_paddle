@@ -78,3 +78,9 @@ Now there is no problem.....
 2. Finish the Decoder PUP
 3. Finish the Decoder MLA
 
+
+# Date 2021/3/1
+#### bugreport
+1. Now Data_Augement.py have some bug.(The return data will be shape 480)
+2. Now the models.py have some bug.(The train.py report: position embedding have some bug)....
+

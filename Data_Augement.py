@@ -89,7 +89,11 @@ class Data_Preprocess(object):
         self.mean_val  = mean_val
         self.std_val   = std_val
 
-    def __call__(self, image, label):
+    def __call__(self, image, label, flag=False):
+        for i in range(label.shape[0]):
+            for j in range(label.shape[1]):
+                if label[i][j] > 58:
+                    flag = True
         # First choose resize or center_crop or random_crop
         id_num = random.randint(0, 2)
         if id_num == 0:
@@ -117,4 +121,4 @@ class Data_Preprocess(object):
         # Thirdly normize the result
         image = normalize(image, self.mean_val, self.std_val).astype('float32')
         label = label.astype('int64')
-        return image, label
+        return image, label,flag
