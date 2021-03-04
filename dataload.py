@@ -49,9 +49,9 @@ class Dataloader():
         assert h == h1, "Error shape!!"
         assert w == w1, "Error shape!!"
         if self.transform:
-            input, label, flag = self.transform(input, label)
+            input, label = self.transform(input, label)
             label        = label[:,:,np.newaxis]
-        return input,label, flag
+        return input,label
 
     def __len__(self):
         return len(self.data_list)
@@ -66,7 +66,5 @@ class Dataloader():
             input  = cv2.imread(data_path)
             input  = cv2.cvtColor(input, cv2.COLOR_BGR2RGB)
             label  = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
-            input, label, flag = self.preprocess(input, label)
-            if flag:
-                image_process.image_Process(label_path)
+            input, label = self.preprocess(input, label)
             yield input, label

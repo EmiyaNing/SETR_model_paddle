@@ -43,10 +43,10 @@ class Attention(Layer):
         self.attention_head_size = int(hidden_unit_num / head_num)
         self.all_head_size       = self.num_attention_head * self.attention_head_size
 
-        self.query = Linear(hidden_unit_num, self.all_head_size)
-        self.key   = Linear(hidden_unit_num, self.all_head_size)
-        self.value = Linear(hidden_unit_num, self.all_head_size)
-        self.output= Linear(hidden_unit_num, hidden_unit_num)
+        self.query = Linear(hidden_unit_num, self.all_head_size, param_attr=fluid.initializer.Xavier(uniform=True))
+        self.key   = Linear(hidden_unit_num, self.all_head_size, param_attr=fluid.initializer.Xavier(uniform=True))
+        self.value = Linear(hidden_unit_num, self.all_head_size, param_attr=fluid.initializer.Xavier(uniform=True))
+        self.output= Linear(hidden_unit_num, hidden_unit_num, param_attr=fluid.initializer.Xavier(uniform=True))
 
         self.atte_dropout = Dropout(dropout)
         self.proj_dropout = Dropout(dropout)
@@ -98,8 +98,8 @@ class MLP(Layer):
                  hidden_unit_num,           # the fully connect layer's unit number
                  dropout):                  # dropout rate.....
         super(MLP, self).__init__()
-        self.fc1 = Linear(hidden_unit_num, 3072, bias_attr=True)
-        self.fc2 = Linear(3072, hidden_unit_num, bias_attr=True)
+        self.fc1 = Linear(hidden_unit_num, 3072, bias_attr=True, param_attr=fluid.initializer.Xavier(uniform=True))
+        self.fc2 = Linear(3072, hidden_unit_num, bias_attr=True, param_attr=fluid.initializer.Xavier(uniform=True))
         self.act = fluid.layers.gelu
         self.dropout = Dropout(dropout)
         
@@ -209,22 +209,15 @@ class Encoder(Layer):
     def forward(self, input):
         attention_weight = []
         layer_output = []
-        base_num = 0 if self.save_layer == 0 else (self.layer_num // self.save_layer)
 
         for id, layer in enumerate(self.model):
             input , weight = layer(input)
-            if base_num != 0 and (id % base_num == 0):
-                layer_output.append(input)
             if self.vis:
                 attention_weight.append(weight)
         
-        if base_num != 0:
-            for i in range(len(layer_output)):
-                layer_output[i] = self.encoder_norm(layer_output[i])
-            return layer_output, weight
-        else:
-            encoder = self.encoder_norm(input)
-            return encoder, attention_weight
+
+        encoder = self.encoder_norm(input)
+        return encoder, attention_weight
 
 '''
     Top level Decoder class...
@@ -245,7 +238,7 @@ class Decoder_Naive(Layer):
     def __init__(self, num_classes, hidden_unit_num, n_patch_size, image_size, dropout):
         super(Decoder_Naive, self).__init__()
         self.image_size = image_size
-        self.cut_op= Linear(n_patch_size + 1, n_patch_size)
+        self.cut_op= Linear(n_patch_size + 1, n_patch_size, param_attr=fluid.initializer.Xavier(uniform=True))
         self.conv1 = Conv2D(hidden_unit_num, 512, 1, 1)
         self.conv2 = Conv2D(512, num_classes, 1, 1)
         self.batchnorm = BatchNorm(512,act='relu')

@@ -1,124 +1,203 @@
-import random
 import cv2
 import numpy as np
-from PIL import Image, ImageEnhance
+import math
+import os
 
-def normalize(image, mean, std):
-    image = image.astype(np.float32, copy=False) / 255.0
-    image -= mean
-    image /= std
-    return image
+class Compose(object):
+    def __init__(self, transforms):
+        self.transforms = transforms
 
-def resize(image, target_size=480, interp=cv2.INTER_LINEAR):
-    if isinstance(target_size, list) or isinstance(target_size, tuple):
-        h = target_size[0]
-        w = target_size[1]
-    else:
-        h = target_size
-        w = target_size
-    image = cv2.resize(image, (w, h), interpolation=interp)
-    return image
-
-def horizontal_flip(image):
-    if len(image.shape) == 3:
-        image = image[:, ::-3, :]
-    elif len(image.shape) == 2:
-        image = image[::-1, :]
-    return image
-
-def brightness(image, brightness_low, brightness_upper):
-    brightness_delta = np.random.uniform(brightness_low, brightness_upper)
-    image = Image.fromarray(image)
-    image = ImageEnhance.Brightness(image).enhance(brightness_delta)
-    image = np.array(image)
-    return image
-
-def contrast(image, contrast_lower, contrast_upper):
-    contrast_delta = np.random.uniform(contrast_lower, contrast_upper)
-    image = Image.fromarray(image)
-    image = ImageEnhance.Contrast(image).enhance(contrast_delta)
-    image = np.array(image)
-    return image
-
-def saturation(image, lower, upper):
-    saturation_delta = np.random.uniform(lower, upper)
-    image = Image.fromarray(image)
-    image = ImageEnhance.Color(image).enhance(saturation_delta)
-    image = np.array(image)
-    return image
-
-def hue(image, hue_lower, hue_upper):
-    hue_delta = np.random.uniform(hue_lower, hue_upper)
-    image = Image.fromarray(image)
-    image = np.array(image.convert('HSV'))
-    image[:, :, 0] = image[:, :, 0] + hue_delta
-    image = Image.fromarray(image, mode='HSV').convert('RGB')
-    image = np.array(image)
-    return image
-
-def rotate(image, rotate_lower, rotate_upper):
-    rotate_delta = np.random.uniform(rotate_lower, rotate_upper)
-    image = Image.fromarray(image)
-    image = image.rotate(int(rotate_delta))
-    image = np.array(image)
-    return image
+    def __call__(self, image, label=None):
+        for t in self.transforms:
+            image, label = t(image, label)
+        return image, label
 
 
-def center_crop(image, crop_size):
-    center_h = image.shape[0] // 2
-    center_w = image.shape[1] // 2
-    image = image[center_h-crop_size//2:center_h+crop_size//2, center_w-crop_size//2:center_w+crop_size//2]
-    return image
-
-def random_crop(image, crop_size):
-    if len(image.shape) == 3:
-        hight, width, depth = image.shape
-    elif len(image.shape) == 2:
-        hight, width = image.shape
-    limit_h = hight - crop_size
-    limit_w = width - crop_size
-    start_h = random.randint(0, limit_h-1)
-    start_w = random.randint(0, limit_w-1)
-    image   = image[start_h:start_h+crop_size, start_w:start_w+crop_size]
-    return image, start_h, start_w
+class Normalize(object):
+    def __init__(self, mean_val, std_val, val_scale=1):
+        # set val_scale = 1 if mean and std are in range (0,1)
+        # set val_scale to other value, if mean and std are in range (0,255)
+        self.mean = np.array(mean_val, dtype=np.float32)
+        self.std = np.array(std_val, dtype=np.float32)
+        self.val_scale = 1/255.0 if val_scale==1 else 1
+    def __call__(self, image, label=None):
+        image = image.astype(np.float32)
+        image = image * self.val_scale
+        image = image - self.mean
+        image = image * (1 / self.std)
+        return image, label
 
 
-class Data_Preprocess(object):
-    def __init__(self, size, mean_val = 0 ,std_val = 1):
-        self.crop_size = size
-        self.mean_val  = mean_val
-        self.std_val   = std_val
+class ConvertDataType(object):
+    def __call__(self, image, label=None):
+        if label is not None:
+            label = label.astype(np.int64)
+        return image.astype(np.float32), label
 
-    def __call__(self, image, label, flag=False):
-        for i in range(label.shape[0]):
-            for j in range(label.shape[1]):
-                if label[i][j] > 58:
-                    flag = True
-        # First choose resize or center_crop or random_crop
-        id_num = random.randint(0, 2)
-        if id_num == 0:
-            image = resize(image, self.crop_size)
-            label = resize(label, self.crop_size, interp=cv2.INTER_NEAREST)
-        elif id_num == 1:
-            image = center_crop(image, self.crop_size)
-            label = center_crop(label, self.crop_size)
-        elif id_num == 2:
-            image,sh,sw = random_crop(image, self.crop_size)
-            label = label[sh:sh+self.crop_size, sw:sw+self.crop_size]
-        # Second choose a augment way, horizontal_flip, brightness, contrast, saturation, hue
-        way_num = random.randint(0, 4)
-        if way_num == 0:
-            image = horizontal_flip(image)
-            label = horizontal_flip(image)
-        elif way_num == 1:
-            image = brightness(image, 0, 10)
-        elif way_num == 2:
-            image = contrast(image, 0, 10)
-        elif way_num == 3:
-            image = saturation(image, 0 ,10)
-        elif way_num == 4:
-            image = hue(image, 0, 10)
-        # Thirdly normize the result
-        image = normalize(image, self.mean_val, self.std_val).astype('float32')
-        label = label.astype('int64')
-        return image, label,flag
+
+class Pad(object):
+    def __init__(self, size, ignore_label=255, mean_val=0, val_scale=1):
+        # set val_scale to 1 if mean_val is in range (0, 1)
+        # set val_scale to 255 if mean_val is in range (0, 255) 
+        factor = 255 if val_scale == 1 else 1
+
+        self.size = size
+        self.ignore_label = ignore_label
+        self.mean_val=mean_val
+        # from 0-1 to 0-255
+        if isinstance(self.mean_val, (tuple,list)):
+            self.mean_val = [int(x* factor) for x in self.mean_val]
+        else:
+            self.mean_val = int(self.mean_val * factor)
+
+
+    def __call__(self, image, label=None):
+        h, w, c = image.shape
+        pad_h = max(self.size - h, 0)
+        pad_w = max(self.size - w, 0)
+
+        pad_h_half = int(pad_h / 2)
+        pad_w_half = int(pad_w / 2)
+
+        if pad_h > 0 or pad_w > 0:
+
+            image = cv2.copyMakeBorder(image,
+                                       top=pad_h_half,
+                                       left=pad_w_half,
+                                       bottom=pad_h - pad_h_half,
+                                       right=pad_w - pad_w_half,
+                                       borderType=cv2.BORDER_CONSTANT,
+                                       value=self.mean_val)
+            if label is not None:
+                label = cv2.copyMakeBorder(label,
+                                           top=pad_h_half,
+                                           left=pad_w_half,
+                                           bottom=pad_h - pad_h_half,
+                                           right=pad_w - pad_w_half,
+                                           borderType=cv2.BORDER_CONSTANT,
+                                           value=self.ignore_label)
+        return image, label
+
+
+# TODO
+class CenterCrop(object):
+    def __init__(self, size=224):
+        self.size = (size, size)
+
+    def __call__(self, image, label):
+        height, width = image.shape[:2]
+        w_start = (width - self.size[0]) // 2
+        h_start = (height - self.size[1]) // 2
+        w_end = w_start + self.size[0]
+        h_end = h_start + self.size[1]
+        image = image[h_start:h_end, w_start:w_end, :]
+        label = image[h_start:h_end, w_start:w_end]
+        return image, label
+
+
+# TODO
+class Resize(object):
+    def __init__(self, size):
+        if isinstance(size, int):
+            self.size = (size, size)
+        else:
+            self.size = size
+
+    def __call__(self, image, label):
+        image = cv2.resize(image, dsize=self.size, interpolation=cv2.INTER_LINEAR)
+        label = cv2.resize(label, dsize=self.size, interpolation=cv2.INTER_NEAREST)
+        return image, label
+
+# TODO
+class RandomFlip(object):
+    def __init__(self, prob=0.5):
+        # horizonal / vertical flipping probability
+        self.prob = prob
+
+    def __call__(self, image, label):
+        if np.random.rand() <= self.prob:
+            image = image[:, ::-1, :]
+            label = label[:, ::-1]
+        else:
+            image = image[::-1, :, :]
+            label = label[::-1, :]
+        return image, label
+
+
+# TODO
+class RandomCrop(object):
+    def __init__(self,size):
+        self.size = (size, size)
+
+    def __call__(self, image, label):
+        h, w = image.shape[:2]
+        h_start = np.random.randint(0, h - self.size[0] + 1)
+        w_start = np.random.randint(0, w - self.size[1] + 1)
+        h_end, w_end = h_start + self.size[0], w_start + self.size[1]
+
+        image = image[h_start:h_end, w_start:w_end, :]
+        label = label[h_start:h_end, w_start:w_end]
+        return image, label
+
+# TODO
+class Scale(object):
+    def __init__(self, scale=0.5):
+        self.scale = scale
+    def __call__(self, image, label):
+        image = cv2.resize(image, dsize=None, fx=self.scale, fy=self.scale, interpolation=cv2.INTER_LINEAR)
+        label = cv2.resize(label, dsize=None, fx=self.scale, fy=self.scale, interpolation=cv2.INTER_NEAREST)
+        return image, label
+
+# TODO
+class RandomScale(object):
+    def __init__(self, scales=[0.25, 0.5, 2, 3]):
+        self.scales = scales
+
+    def __call__(self, image, label):
+        scaler = Scale(scale=float(np.random.choice(self.scales)))
+        image, label = scaler(image, label)
+        return image, label
+
+
+class Augmentation():
+    def __init__(self, image_size, mean_val=0, std_val=1.0):
+        #TODO: add self.augment, which contains
+        # random scale, pad, random crop, random flip, convert data type, and normalize ops
+
+        self.augment = Compose([RandomScale(scales=[0.5, 1, 2]),
+                                Pad(size=image_size),
+                                RandomCrop(size=image_size), 
+                                RandomFlip(prob=0.5), 
+                                ConvertDataType(), 
+                                Normalize(mean_val, std_val)])
+        
+    def __call__(self, image, label):
+        return self.augment(image, label)
+
+
+
+def main():
+    image = cv2.imread('./work/dummy_data/JPEGImages/2008_000064.jpg',1)
+    label = cv2.imread('./work/dummy_data/GroundTruth_trainval_png/2008_000064.png',0)
+
+    # TODO: crop_size
+    crop_size = 256
+    # TODO: Transform: RandomScale, RandomFlip, Pad, RandomCrop
+    transform = Compose([RandomScale(scales=[0.5, 1, 2]),
+                         RandomFlip(prob=0.5),
+                         Pad(size=crop_size),
+                         RandomCrop(size=crop_size)])
+
+
+    for i in range(10):
+        # TODO: call transform
+        image, label = transform(image, label)
+        # TODO: save image
+        save_path = './work/save/'
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        cv2.imwrite(save_path + '{}.jpg'.format(i), image)
+        cv2.imwrite(save_path + '{}.png'.format(i), label)
+
+if __name__ == "__main__":
+    main()
