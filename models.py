@@ -129,7 +129,8 @@ class Embedding(Layer):
         self.patch_embedding    = Conv2D(num_channels=in_channel,
                                       num_filters=hidden_unit_num,
                                       filter_size=patch_num,
-                                      stride=patch_num)
+                                      stride=patch_num,
+                                      act='relu')
         self.position_embedding = fluid.layers.create_parameter((1, n_patch_size+1, hidden_unit_num),
                                                                 dtype='float32',
                                                                 is_bias=True)
@@ -187,6 +188,7 @@ class Encoder(Layer):
         In this class, the input image will be divide as a grid of patches. 
         Each patch is a vector whose length is h*w/256.
         This class is consist by transformer modul.
+        Now we output 2 axiliary loss
     '''
     def __init__(self, 
                  hidden_unit_num,
@@ -208,16 +210,18 @@ class Encoder(Layer):
     
     def forward(self, input):
         attention_weight = []
-        layer_output = []
-
+        auxiliary   = None
         for id, layer in enumerate(self.model):
             input , weight = layer(input)
+            if (id * 2 // len(self.model) == 0):
+                auxiliary = input
             if self.vis:
                 attention_weight.append(weight)
         
 
         encoder = self.encoder_norm(input)
-        return encoder, attention_weight
+        auxiliary = self.encoder_norm(auxiliary)
+        return encoder, auxiliary, attention_weight
 
 '''
     Top level Decoder class...
@@ -279,11 +283,11 @@ class Decoder_PUP(Layer):
     def __init__(self, num_class, hidden_unit_num, n_patch_size, dropout):
         super(Decoder_PUP, self).__init__()
         self.cut_op    = Linear(n_patch_size+1, n_patch_size)
-        self.up_layer1 = Conv2DTranspose(num_channels=hidden_unit_num, num_filters=512, filter_size=2, stride=2)
-        self.up_layer2 = Conv2DTranspose(num_channels=512, num_filters=256, filter_size=2, stride=2)
-        self.up_layer3 = Conv2DTranspose(num_channels=256, num_filters=128, filter_size=2, stride=2)
-        self.up_layer4 = Conv2DTranspose(num_channels=128, num_filters=64, filter_size=2, stride=2)
-        self.conv2     = Conv2D(64, num_class, 1, 1)
+        self.up_layer1 = Conv2DTranspose(num_channels=hidden_unit_num, num_filters=512, filter_size=2, stride=2, act='relu')
+        self.up_layer2 = Conv2DTranspose(num_channels=512, num_filters=256, filter_size=2, stride=2,act='relu')
+        self.up_layer3 = Conv2DTranspose(num_channels=256, num_filters=128, filter_size=2, stride=2,act='relu')
+        self.up_layer4 = Conv2DTranspose(num_channels=128, num_filters=64, filter_size=2, stride=2,act='relu')
+        self.conv2     = Conv2D(64, num_class, 1, 1,act='relu')
 
     def forward(self, input):
         h = fluid.layers.transpose(input, [0, 2, 1])
@@ -385,11 +389,12 @@ class Transformer(Layer):
         '''
         
         x = self.embedding(input)
-        x, weight = self.encoder(x)
+        x,auxiliary_14, weight = self.encoder(x)
         x = self.decoder(x)
+        auxiliary_14 = self.decoder(auxiliary_14)
         if self.visualable:
-            return x, weight
+            return x, auxiliary_14, weight
         else:
-            return x
+            return x, auxiliary_14
 
     
