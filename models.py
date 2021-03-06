@@ -16,6 +16,7 @@ import math
 import numpy as np
 import paddle.fluid as fluid
 import paddle.fluid.layers as layers
+from paddle.fluid.dygraph import to_variable
 from paddle.fluid.dygraph import Layer
 from paddle.fluid.dygraph import LayerNorm
 from paddle.fluid.dygraph import Dropout
@@ -24,6 +25,9 @@ from paddle.fluid.dygraph import Linear
 from paddle.fluid.dygraph import LayerList
 from paddle.fluid.dygraph import BatchNorm
 from paddle.fluid.dygraph import Conv2DTranspose
+from Resnet24 import ResNet24
+
+
 
 class Attention(Layer):
     '''
@@ -362,10 +366,14 @@ class Transformer(Layer):
                  head_num=8,            # the number of self-attention head
                  dropout=0.1,           # the dropout probility
                  decoder_name='MLA',     # can be MLA, PUP, Naive
+                 hyber=False,
                  visualable=True):
         super(Transformer, self).__init__()
         self.image_patch_size = (image_size // 16)*(image_size // 16)
-        self.embedding  = Embedding(hidden_unit_num, image_size, 3, 16, dropout)
+        if hyber:
+            self.embedding  = ResNet24(hidden_unit_num, image_size, 3, 16, dropout)
+        else:
+            self.embedding  = Embedding(hidden_unit_num, image_size, 3, 16, dropout)
         self.visualable = visualable
         if decoder_name == 'MLA':
             self.encoder = Encoder(hidden_unit_num, layer_num, head_num, dropout, visualable, 4)

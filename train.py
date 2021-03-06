@@ -13,20 +13,20 @@ from Lossfunc import CostFunc
 
 parse = argparse.ArgumentParser()
 parse.add_argument('--image_size', type=int, default=480)
-parse.add_argument('--num_class', type=int, default=16)
+parse.add_argument('--num_class', type=int, default=15)
 parse.add_argument('--hidden_unit_num', type=int, default=1024)
-parse.add_argument('--layer_num', type=int, default=12)
-parse.add_argument('--head_num', type=int, default=16)
+parse.add_argument('--layer_num', type=int, default=6)
+parse.add_argument('--head_num', type=int, default=8)
 parse.add_argument('--dropout', type=float, default=0.8)
 parse.add_argument('--decoder_name', type=str, default='PUP')
-parse.add_argument('--lr_init', type=float, default=0.01)
+parse.add_argument('--lr_init', type=float, default=0.005)
 parse.add_argument('--num_epochs', type=int, default=1000)
-parse.add_argument('--batch_size', type=int, default=8)
+parse.add_argument('--batch_size', type=int, default=1)
 parse.add_argument('--image_folder', type=str, default='/home/aistudio/dataset')
 parse.add_argument('--image_list_file', type=str, default='/home/aistudio/dataset/train_list.txt')
 parse.add_argument('--val_list_file', type=str, default='/home/aistudio/dataset/val_list.txt')
 parse.add_argument('--checkpoint_folder', type=str, default='./output')
-parse.add_argument('--save_freq', type=int, default=20)
+parse.add_argument('--save_freq', type=int, default=1)
 
 args = parse.parse_args()
 
@@ -35,6 +35,7 @@ def train(train_load, model, costFunc, optimizer, epoch, total_batch):
     model.train()
     train_loss_meter = AverageMeter()
     miou_meter       = AverageMeter()
+    count            = 0
     for batch_id, data in enumerate(train_load):
         image = data[0].astype('float32')
         label = data[1]
@@ -53,10 +54,14 @@ def train(train_load, model, costFunc, optimizer, epoch, total_batch):
         miou,_,_  = fluid.layers.mean_iou(pred_label, label, args.num_class)
         train_loss_meter.update(loss.numpy()[0], n)
         miou_meter.update(miou.numpy()[0], n)
-        print(f"Epoch[{epoch:03d}/{args.num_epochs:03d}], " +
-                f"Step[{batch_id:04d}/{total_batch:04d}], " +
-                f"Average Loss: {train_loss_meter.avg:4f}, "+
-                f"Mean Iou: {miou_meter.avg:4f}") 
+        if count == 8:
+            print(f"Epoch[{epoch:03d}/{args.num_epochs:03d}], " +
+                    f"Step[{batch_id:04d}/{total_batch:04d}], " +
+                    f"Average Loss: {train_loss_meter.avg:4f}, "+
+                    f"Mean Iou: {miou_meter.avg:4f}") 
+            count = 0
+        else:
+            count += 1
     return train_loss_meter.avg
 
 def validation(dataloader, val_size, model, num_classes):
@@ -94,7 +99,15 @@ def main():
         val_load.set_sample_generator(dataloader, batch_size=args.batch_size, places=Place)
         total_batch = int(len(dataloader) / args.batch_size)
 
-        model = Transformer(args.image_size, args.num_class, args.hidden_unit_num, args.layer_num, args.head_num, args.dropout, args.decoder_name, False)
+        model = Transformer(image_size=args.image_size,
+                            num_classes=args.num_class,
+                            hidden_unit_num=args.hidden_unit_num,
+                            layer_num=args.layer_num,
+                            head_num=args.head_num,
+                            dropout=args.dropout,
+                            decoder_name='PUP',
+                            hyber=True,
+                            visualable=False)
 
         costFunc = CostFunc
         #optimizer= SGDOptimizer(fluid.layers.polynomial_decay(args.lr_init, 100, power=0.9), parameter_list=model.parameters())
@@ -103,7 +116,7 @@ def main():
             train_loss = train(train_load, model, costFunc, optimizer, epoch, total_batch)
             print(f"----- Epoch[{epoch}/{args.num_epochs}] Train Loss: {train_loss}")
 
-            miou = validation(val_load, val_size = 16, model = model, num_classes=args.num_class)   
+            miou = validation(val_load, val_size = 256, model = model, num_classes=args.num_class)   
             print("------Now the Mean IOU == " + str(miou) + "------------")
 
             if epoch % args.save_freq == 0 or epoch == args.num_epochs:
