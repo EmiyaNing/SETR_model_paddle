@@ -166,7 +166,7 @@ class Augmentation():
 
         self.augment = Compose([RandomScale(scales=[0.5, 1, 2]),
                                 Pad(size=image_size),
-                                RandomCrop(size=image_size), 
+                                Resize(size=image_size), 
                                 RandomFlip(prob=0.5), 
                                 ConvertDataType(), 
                                 Normalize(mean_val, std_val)])

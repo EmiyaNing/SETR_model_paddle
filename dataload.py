@@ -9,19 +9,15 @@ class Transform(object):
     def __init__(self, size):
         self.size = size
 
-    def __call__(self, input, label, flag = False):
+    def __call__(self, inputs, label = None, flag = False):
         '''
          对于input图片，在完成resize工作之后还需要进行相应的归一化操作。
          否则在训练模型的时候会存在很大的误差。
          还有，label的数据类型必须转换成int64，否则paddle汇报很奇怪的错误。
         '''
-        input = cv2.resize(input, (self.size, self.size), interpolation=cv2.INTER_LINEAR).astype('float32') / 255
+        inputs = cv2.resize(inputs, (self.size, self.size), interpolation=cv2.INTER_LINEAR).astype('float32') / 255
         label = cv2.resize(label, (self.size, self.size), interpolation=cv2.INTER_NEAREST).astype("int64")
-        for i in range(label.shape[0]):
-            for j in range(label.shape[1]):
-                if label[i][j] > 58:
-                    flag = True
-        return input, label, flag
+        return inputs, label
 
 
 class Dataloader():

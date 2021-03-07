@@ -56,19 +56,18 @@ class BasicBlock(fluid.dygraph.Layer):
                                  num_filters=num_filters,
                                  filter_size=3,
                                  stride=stride,
-                                 act='brelu',
                                  name=name)
         self.conv1 = ConvBNLayer(num_channels=num_filters,
                                  num_filters=num_filters,
                                  filter_size=3,
-                                 act='brelu',
+                                 act='elu',
                                  name=name)
         if not shortcut:
             self.short = ConvBNLayer(num_channels=num_channels,
                                      num_filters=num_filters,
                                      filter_size=1,
                                      stride=stride,
-                                     act=None,
+                                     act='elu',
                                      name=name)
         self.shortcut = shortcut
 
@@ -94,6 +93,7 @@ class ResNet24(fluid.dygraph.Layer):
     def __init__(self, hidden_unit_num, image_size, in_channel, patch_num, dropout):
         super(ResNet24, self).__init__()
         self.patch_size = image_size // patch_num
+        self.patch_num  = patch_num
         n_patch_size    = (image_size // patch_num) * (image_size // patch_num)
         self.position_embedding = fluid.layers.create_parameter((1, n_patch_size+1, hidden_unit_num), dtype='float32', is_bias=True)
         self.cls_token          = fluid.layers.create_parameter((1, 1, hidden_unit_num), is_bias=False, dtype='float32')
@@ -129,10 +129,17 @@ class ResNet24(fluid.dygraph.Layer):
                                    stride=1,
                                    shortcut=False)
         self.layer4_2 = BasicBlock(num_channels=256,
+                                   num_filters=256,
+                                   stride=1,
+                                   shortcut=False)
+        self.layer5_1 = BasicBlock(num_channels=256,
+                                   num_filters=512,
+                                   stride=1,
+                                   shortcut=False)
+        self.layer5_2 = BasicBlock(num_channels=512,
                                    num_filters=hidden_unit_num,
                                    stride=2,
-                                   shortcut=False)
-
+                                   shortcut=False)                           
 
     def forward(self,input):
         num_input = input.shape[0]
@@ -145,6 +152,8 @@ class ResNet24(fluid.dygraph.Layer):
         x = self.layer3_2(x)
         x = self.layer4_1(x)
         x = self.layer4_2(x)
+        x = self.layer5_1(x)
+        x = self.layer5_2(x)
         x = fluid.layers.reshape(x, [x.shape[0], x.shape[1], x.shape[2] * x.shape[3]])
         x = fluid.layers.transpose(x, (0, 2, 1))
         x = fluid.layers.concat(input=[cls_token, x], axis=1)

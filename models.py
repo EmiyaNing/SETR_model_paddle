@@ -47,10 +47,10 @@ class Attention(Layer):
         self.attention_head_size = int(hidden_unit_num / head_num)
         self.all_head_size       = self.num_attention_head * self.attention_head_size
 
-        self.query = Linear(hidden_unit_num, self.all_head_size, param_attr=fluid.initializer.Xavier(uniform=True))
-        self.key   = Linear(hidden_unit_num, self.all_head_size, param_attr=fluid.initializer.Xavier(uniform=True))
-        self.value = Linear(hidden_unit_num, self.all_head_size, param_attr=fluid.initializer.Xavier(uniform=True))
-        self.output= Linear(hidden_unit_num, hidden_unit_num, param_attr=fluid.initializer.Xavier(uniform=True))
+        self.query = Linear(hidden_unit_num, self.all_head_size, act='elu',param_attr=fluid.initializer.Xavier(uniform=True))
+        self.key   = Linear(hidden_unit_num, self.all_head_size, act='elu',param_attr=fluid.initializer.Xavier(uniform=True))
+        self.value = Linear(hidden_unit_num, self.all_head_size, act='elu',param_attr=fluid.initializer.Xavier(uniform=True))
+        self.output= Linear(hidden_unit_num, hidden_unit_num, act='elu',param_attr=fluid.initializer.Xavier(uniform=True))
 
         self.atte_dropout = Dropout(dropout)
         self.proj_dropout = Dropout(dropout)
@@ -102,8 +102,8 @@ class MLP(Layer):
                  hidden_unit_num,           # the fully connect layer's unit number
                  dropout):                  # dropout rate.....
         super(MLP, self).__init__()
-        self.fc1 = Linear(hidden_unit_num, 3072, bias_attr=True, param_attr=fluid.initializer.Xavier(uniform=True))
-        self.fc2 = Linear(3072, hidden_unit_num, bias_attr=True, param_attr=fluid.initializer.Xavier(uniform=True))
+        self.fc1 = Linear(hidden_unit_num, 2048, bias_attr=True, act='elu',param_attr=fluid.initializer.Xavier(uniform=True))
+        self.fc2 = Linear(2048, hidden_unit_num, bias_attr=True, act='elu',param_attr=fluid.initializer.Xavier(uniform=True))
         self.act = fluid.layers.gelu
         self.dropout = Dropout(dropout)
         
@@ -143,11 +143,6 @@ class Embedding(Layer):
 
 
     def forward(self, input):
-        '''
-            傻逼paddle的flatten函数只能将高维tensor拉平成2维tensor.
-            我觉得写这个函数的开发人员脑子绝对有问题，你娘的谁特么一定样将一个tensor拉平成2维呢。
-            我是李彦宏我特么绝对把这个程序员给开除掉。
-        '''
         num_input = input.shape[0]
         cls_token = fluid.layers.expand(self.cls_token, expand_times=[num_input, 1, 1])
         x         = self.patch_embedding(input)
@@ -247,8 +242,8 @@ class Decoder_Naive(Layer):
         super(Decoder_Naive, self).__init__()
         self.image_size = image_size
         self.cut_op= Linear(n_patch_size + 1, n_patch_size, param_attr=fluid.initializer.Xavier(uniform=True))
-        self.conv1 = Conv2D(hidden_unit_num, 512, 1, 1)
-        self.conv2 = Conv2D(512, num_classes, 1, 1)
+        self.conv1 = Conv2D(hidden_unit_num, 512, 1, 1, act='elu')
+        self.conv2 = Conv2D(512, num_classes, 1, 1, act='elu')
         self.batchnorm = BatchNorm(512,act='relu')
         self.up_output = fluid.layers.resize_nearest
 
@@ -287,10 +282,10 @@ class Decoder_PUP(Layer):
     def __init__(self, num_class, hidden_unit_num, n_patch_size, dropout):
         super(Decoder_PUP, self).__init__()
         self.cut_op    = Linear(n_patch_size+1, n_patch_size)
-        self.up_layer1 = Conv2DTranspose(num_channels=hidden_unit_num, num_filters=512, filter_size=2, stride=2, act='relu')
-        self.up_layer2 = Conv2DTranspose(num_channels=512, num_filters=256, filter_size=2, stride=2,act='relu')
-        self.up_layer3 = Conv2DTranspose(num_channels=256, num_filters=128, filter_size=2, stride=2,act='relu')
-        self.up_layer4 = Conv2DTranspose(num_channels=128, num_filters=64, filter_size=2, stride=2,act='relu')
+        self.up_layer1 = Conv2DTranspose(num_channels=hidden_unit_num, num_filters=512, filter_size=2, stride=2)
+        self.up_layer2 = Conv2DTranspose(num_channels=512, num_filters=256, filter_size=2, stride=2)
+        self.up_layer3 = Conv2DTranspose(num_channels=256, num_filters=128, filter_size=2, stride=2)
+        self.up_layer4 = Conv2DTranspose(num_channels=128, num_filters=64, filter_size=2, stride=2)
         self.conv2     = Conv2D(64, num_class, 1, 1,act='relu')
 
     def forward(self, input):

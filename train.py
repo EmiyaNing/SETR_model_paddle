@@ -12,15 +12,15 @@ from Data_Augement import Augmentation
 from Lossfunc import CostFunc
 
 parse = argparse.ArgumentParser()
-parse.add_argument('--image_size', type=int, default=480)
+parse.add_argument('--image_size', type=int, default=512)
 parse.add_argument('--num_class', type=int, default=15)
-parse.add_argument('--hidden_unit_num', type=int, default=1024)
-parse.add_argument('--layer_num', type=int, default=6)
-parse.add_argument('--head_num', type=int, default=8)
+parse.add_argument('--hidden_unit_num', type=int, default=512)
+parse.add_argument('--layer_num', type=int, default=2)
+parse.add_argument('--head_num', type=int, default=16)
 parse.add_argument('--dropout', type=float, default=0.8)
 parse.add_argument('--decoder_name', type=str, default='PUP')
-parse.add_argument('--lr_init', type=float, default=0.005)
-parse.add_argument('--num_epochs', type=int, default=1000)
+parse.add_argument('--lr_init', type=float, default=0.01)
+parse.add_argument('--num_epochs', type=int, default=10)
 parse.add_argument('--batch_size', type=int, default=1)
 parse.add_argument('--image_folder', type=str, default='/home/aistudio/dataset')
 parse.add_argument('--image_list_file', type=str, default='/home/aistudio/dataset/train_list.txt')
@@ -82,7 +82,7 @@ def validation(dataloader, val_size, model, num_classes):
 
 
         miou, _, _ = paddle.fluid.layers.mean_iou(pred_label, label, num_classes)
-        mious.update(miou.numpy()[0], counter)
+        mious.update(miou.numpy()[0], 1)
         if counter == val_size:
             return mious.avg
 
@@ -90,13 +90,14 @@ def validation(dataloader, val_size, model, num_classes):
 def main():
     Place = paddle.fluid.CUDAPlace(0)
     with fluid.dygraph.guard(Place):
-        preprocess = Augmentation(480)
+        #preprocess = Augmentation(args.image_size)
+        preprocess = Transform(args.image_size)
         dataloader = Dataloader(args.image_folder, args.image_list_file, transform=preprocess, shuffle=True)
         dataloader_1 = Dataloader(args.image_folder, args.val_list_file, transform=preprocess, shuffle=True)
         train_load = fluid.io.DataLoader.from_generator(capacity=1, use_multiprocess=False)
         train_load.set_sample_generator(dataloader, batch_size=args.batch_size, places=Place)
         val_load   = fluid.io.DataLoader.from_generator(capacity=1, use_multiprocess=False)
-        val_load.set_sample_generator(dataloader, batch_size=args.batch_size, places=Place)
+        val_load.set_sample_generator(dataloader_1, batch_size=args.batch_size, places=Place)
         total_batch = int(len(dataloader) / args.batch_size)
 
         model = Transformer(image_size=args.image_size,
@@ -110,8 +111,8 @@ def main():
                             visualable=False)
 
         costFunc = CostFunc
-        #optimizer= SGDOptimizer(fluid.layers.polynomial_decay(args.lr_init, 100, power=0.9), parameter_list=model.parameters())
-        optimizer = AdamOptimizer(fluid.layers.polynomial_decay(args.lr_init, 100, power=0.9), parameter_list=model.parameters())
+        #optimizer= SGDOptimizer(fluid.layers.polynomial_decay(args.lr_init, 10, power=0.9), parameter_list=model.parameters())
+        optimizer = AdamOptimizer(fluid.layers.polynomial_decay(args.lr_init, 10, power=0.9), parameter_list=model.parameters())
         for epoch in range(1, args.num_epochs + 1):
             train_loss = train(train_load, model, costFunc, optimizer, epoch, total_batch)
             print(f"----- Epoch[{epoch}/{args.num_epochs}] Train Loss: {train_loss}")
@@ -120,7 +121,7 @@ def main():
             print("------Now the Mean IOU == " + str(miou) + "------------")
 
             if epoch % args.save_freq == 0 or epoch == args.num_epochs:
-                model_path = os.path.join(args.checkpoint_folder, f"SETR-Epoch-{epoch}-Loss-{train_loss}-MIOU-{miou}")
+                model_path = os.path.join(args.checkpoint_folder, f"SETR-ResNet30-Epoch-{epoch}-Loss-{train_loss:4f}-MIOU-{miou:4f}")
 
                 model_dict = model.state_dict()
                 fluid.save_dygraph(model_dict, model_path)
